@@ -96,7 +96,16 @@ input / output / cache-read / cache-write tokens). This validates rules 1–2.
 - in another sample session, about 20% of the main model's cache reads and
   about 4k input tokens were missing, probably from compaction or side
   queries.
-- advisor calls (`advisorModel` on a record) have no separate usage.
+- **advisor calls**. When an advisor is enabled, a second model is consulted
+  during a response; the record carries `advisorModel` (e.g.
+  `claude-opus-5-5`) but no usage for that consultation. It is not in
+  `usage.iterations` either. In the author's own sessions the advisor was
+  attached to every main-thread response of the session in which pegada-code
+  was built (123 of 123), so this can be the **largest coverage gap**. It
+  is also not separable: when the advisor model is the same as the main model,
+  any advisor usage that `cost-state` includes cannot be told apart from other
+  unlogged usage. Reports count responses with an advisor under "Recorded but
+  not estimated" and state the gap explicitly.
 
 pegada therefore reports two things:
 

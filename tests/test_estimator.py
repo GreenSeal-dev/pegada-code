@@ -90,7 +90,7 @@ class EstimatorTest(TempEnvTestCase):
     def test_approximated_models_are_reported(self):
         est = Estimator(COEFFS, self.params())
         est.footprint([rec("some-approx-model", o=1)])
-        self.assertEqual(est.approximated, {"some-approx-model": "tier"})
+        self.assertEqual({m: f.id for m, f in est.approximated.items()}, {"some-approx-model": "tier"})
         self.assertEqual(est.unknown_models, set())
 
     def test_intervals_are_ordered(self):

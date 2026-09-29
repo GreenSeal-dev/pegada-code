@@ -96,11 +96,8 @@ def build_report(contents: LedgerContents, est: Estimator, project: str = "", to
             f"{len(est.unknown_models)} model(s) not recognised, estimated with the wide fallback coefficients: "
             + ", ".join(sorted(est.unknown_models))
         )
-    if est.approximated:
-        warnings.append(
-            "Model(s) not in EcoLogits, estimated with another model's data or their tier's envelope: "
-            + ", ".join(f"{m} → {f}" for m, f in sorted(est.approximated.items()))
-        )
+    for m, fam in sorted(est.approximated.items()):
+        warnings.append(f"`{m}` (coefficients `{fam.id}`): {fam.approximation}")
     if contents.bad_lines:
         warnings.append(f"{contents.bad_lines} unreadable ledger line(s) were skipped.")
 
@@ -251,6 +248,11 @@ def render_markdown(rep: Dict[str, Any]) -> str:
         add("")
         for k, v in rep["not_estimated"].items():
             add(f"- {k.replace('_', ' ')}: {v:,}")
+        if rep["not_estimated"].get("messages_with_advisor"):
+            add("")
+            add("Advisor calls (a second model consulted during a response) have no token usage in transcripts, "
+                "so they are neither in the estimate nor separable in the unlogged-usage line. This can be a "
+                "large gap; see METHODOLOGY §3.")
         add("")
 
     params = rep["parameters"]

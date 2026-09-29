@@ -79,7 +79,22 @@ class ReportTest(TempEnvTestCase):
 
     def test_approximation_warning(self):
         rep = self.report()
-        self.assertTrue(any("claude-opus-5-5 → claude-opus-5-5" in w for w in rep["warnings"]))
+        self.assertTrue(any("`claude-opus-5-5`" in w and "claude-opus-5." in w for w in rep["warnings"]))
+
+    def test_advisor_note(self):
+        from dataclasses import replace
+        recs = {k: replace(r, extras=dict(r.extras, advisor_model="claude-opus-5-5")) for k, r in self.contents.records.items()}
+        from pegada.ledger import LedgerContents
+        rep = self.report(LedgerContents(records=recs, totals=self.contents.totals))
+        self.assertEqual(rep["not_estimated"]["messages_with_advisor"], 5)
+        self.assertIn("Advisor calls", render_markdown(rep))
+        self.assertNotIn("Advisor calls", render_markdown(self.report()))
+
+    def test_interval_format_collapses_indistinguishable_ends(self):
+        from pegada import fmt
+        from pegada.interval import Interval
+        self.assertEqual(fmt.interval(Interval(11.8, 11.8, 11.81), "Wh"), "11.8 Wh")
+        self.assertEqual(fmt.interval(Interval(1, 2, 3), "Wh", mid=False), "1.00–3.00 Wh")
 
     def test_empty_report(self):
         from pegada.ledger import LedgerContents

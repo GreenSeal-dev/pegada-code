@@ -95,7 +95,7 @@ class Estimator:
         self.coefficients = coefficients
         self.parameters = parameters
         self.unknown_models: Set[str] = set()
-        self.approximated: Dict[str, str] = {}  # model -> family id used
+        self.approximated: Dict[str, Family] = {}  # model -> family whose data is used
         self.families_used: Set[str] = set()
 
     def family(self, model: str) -> Family:
@@ -103,7 +103,7 @@ class Estimator:
         if is_fallback:
             self.unknown_models.add(model)
         elif fam.approximation:
-            self.approximated[model] = fam.id
+            self.approximated[model] = fam
         self.families_used.add(fam.id)
         return fam
 
