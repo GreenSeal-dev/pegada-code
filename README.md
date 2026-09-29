@@ -1,5 +1,7 @@
 # pegada-code
 
+[![AI coding CO2e: 0.0522–2.05 kg](https://img.shields.io/badge/AI%20coding%20CO2e-0.0522%E2%80%932.05%20kg-4c8c4a)](https://github.com/GreenSeal-dev/pegada-code/blob/main/METHODOLOGY.md)
+
 **Estimate the energy and carbon footprint of AI coding agents in your project, from the tokens and models they use.**
 
 *Pegada* is Portuguese for *footprint*. pegada-code is the first tool of the pegada family: a Claude Code plugin
