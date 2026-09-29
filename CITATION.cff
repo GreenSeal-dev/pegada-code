@@ -5,8 +5,8 @@ type: software
 authors:
   - family-names: Cruz
     given-names: Luís
-    email: L.Cruz@tudelft.nl
-    affiliation: Delft University of Technology
+    email: luis@greenseal.dev
+    affiliation: GreenSeal
 version: 0.1.0
 date-released: 2026-09-29
 license: Apache-2.0

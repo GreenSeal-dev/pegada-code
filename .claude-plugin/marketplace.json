@@ -1,6 +1,6 @@
 {
   "name": "pegada-code",
-  "owner": { "name": "Luís Cruz", "email": "L.Cruz@tudelft.nl" },
+  "owner": { "name": "GreenSeal", "email": "luis@greenseal.dev", "url": "https://greenseal.dev" },
   "description": "pegada: environmental footprint tools for AI agents.",
   "plugins": [
     {

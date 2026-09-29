@@ -9,7 +9,7 @@ description = "Energy and carbon footprint estimates (low/mid/high) for AI codin
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "Apache-2.0"}
-authors = [{name = "Luís Cruz", email = "L.Cruz@tudelft.nl"}]
+authors = [{name = "Luís Cruz", email = "luis@greenseal.dev"}]
 keywords = ["green software", "carbon", "energy", "llm", "claude code"]
 dependencies = []
 
