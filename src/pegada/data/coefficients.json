@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "coefficients_version": "0.1.0-placeholder",
+  "units": "Wh of IT (server) energy per 1,000,000 tokens, before PUE",
+  "description": "Per-token energy coefficients by model family. e_prefill applies to uncached input and cache-write tokens, e_cache to cache-read tokens, e_decode to output tokens (including reasoning/thinking tokens). Families are matched in order; the first family whose glob pattern matches the lower-cased model id is used. Each value is a {low, mid, high} triple; see METHODOLOGY.md.",
+  "families": [
+    {
+      "id": "claude-opus",
+      "match": ["claude-opus-*", "*claude*opus*"],
+      "e_prefill": {"low": 10, "mid": 60, "high": 300},
+      "e_cache": {"low": 0.5, "mid": 5, "high": 30},
+      "e_decode": {"low": 300, "mid": 1500, "high": 6000},
+      "status": "PLACEHOLDER",
+      "source": "PLACEHOLDER: order-of-magnitude values chosen by the pegada authors to exercise the pipeline. Not measured, not for citation. To be calibrated (aligned with EcoLogits).",
+      "notes": "Largest Anthropic tier; parameter count undisclosed."
+    },
+    {
+      "id": "claude-sonnet",
+      "match": ["claude-sonnet-*", "*claude*sonnet*"],
+      "e_prefill": {"low": 5, "mid": 30, "high": 150},
+      "e_cache": {"low": 0.25, "mid": 2.5, "high": 15},
+      "e_decode": {"low": 150, "mid": 700, "high": 3000},
+      "status": "PLACEHOLDER",
+      "source": "PLACEHOLDER: order-of-magnitude values chosen by the pegada authors to exercise the pipeline. Not measured, not for citation. To be calibrated (aligned with EcoLogits).",
+      "notes": "Mid Anthropic tier; parameter count undisclosed."
+    },
+    {
+      "id": "claude-haiku",
+      "match": ["claude-haiku-*", "*claude*haiku*"],
+      "e_prefill": {"low": 1, "mid": 6, "high": 30},
+      "e_cache": {"low": 0.05, "mid": 0.5, "high": 3},
+      "e_decode": {"low": 30, "mid": 150, "high": 700},
+      "status": "PLACEHOLDER",
+      "source": "PLACEHOLDER: order-of-magnitude values chosen by the pegada authors to exercise the pipeline. Not measured, not for citation. To be calibrated (aligned with EcoLogits).",
+      "notes": "Smallest Anthropic tier; parameter count undisclosed."
+    }
+  ],
+  "fallback": {
+    "id": "unknown",
+    "match": [],
+    "e_prefill": {"low": 1, "mid": 40, "high": 300},
+    "e_cache": {"low": 0.05, "mid": 3, "high": 30},
+    "e_decode": {"low": 30, "mid": 1000, "high": 6000},
+    "status": "PLACEHOLDER",
+    "source": "PLACEHOLDER: envelope spanning the smallest-low and largest-high of the known families, used for unrecognised models.",
+    "notes": "Deliberately wide. A report that uses this entry prints a warning naming the model."
+  }
+}

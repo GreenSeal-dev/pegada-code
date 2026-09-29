@@ -1,0 +1,4 @@
+#!/bin/sh
+# pegada CLI shim: runs the bundled, stdlib-only Python package without installation.
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m pegada "$@"

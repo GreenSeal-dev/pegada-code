@@ -1,0 +1,13 @@
+{
+  "name": "pegada-code",
+  "owner": { "name": "Luís Cruz", "email": "L.Cruz@tudelft.nl" },
+  "description": "pegada: environmental footprint tools for AI agents.",
+  "plugins": [
+    {
+      "name": "pegada-code",
+      "source": "./",
+      "description": "Energy and carbon footprint estimates (low/mid/high) for Claude Code usage in a project.",
+      "version": "0.1.0"
+    }
+  ]
+}

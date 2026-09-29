@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below, and report the coefficient version used."
+title: "pegada-code: energy and carbon footprint estimates for AI coding agents"
+type: software
+authors:
+  - family-names: Cruz
+    given-names: Luís
+    email: L.Cruz@tudelft.nl
+    affiliation: Delft University of Technology
+version: 0.1.0
+date-released: 2026-09-29
+license: Apache-2.0
+repository-code: "https://github.com/GreenSeal-dev/pegada-code"
+keywords:
+  - green software
+  - sustainable software engineering
+  - large language models
+  - carbon footprint
+  - energy consumption
+  - AI coding agents

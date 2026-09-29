@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pegada-code"
+version = "0.1.0"
+description = "Energy and carbon footprint estimates (low/mid/high) for AI coding agents, from token usage."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "Apache-2.0"}
+authors = [{name = "Luís Cruz", email = "L.Cruz@tudelft.nl"}]
+keywords = ["green software", "carbon", "energy", "llm", "claude code"]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/GreenSeal-dev/pegada-code"
+Methodology = "https://github.com/GreenSeal-dev/pegada-code/blob/main/METHODOLOGY.md"
+
+[project.scripts]
+pegada = "pegada.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pegada = ["data/*.json"]
