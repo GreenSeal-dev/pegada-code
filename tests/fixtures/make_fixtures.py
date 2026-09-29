@@ -97,6 +97,8 @@ def main():
     synthetic = assistant("sess-a", demo, "2026-01-01T10:02:00.000Z", "msg_syn", "<synthetic>", usage(0, 0, 0, 0), "text", "stop_sequence")
     cost_state = {
         "type": "cost-state", "sessionId": "sess-a", "totalCostUSD": 0.1,
+        # Snapshot at 10:02:30Z: process start 09:59:00Z (epoch ms) + 3.5 min.
+        "startTime": 1767261540000, "totalDuration": 210000,
         "modelUsage": {
             son: {"inputTokens": 113, "outputTokens": 420, "thinkingTokens": 40, "cacheReadInputTokens": 3000,
                   "cacheCreationInputTokens": 2500, "webSearchRequests": 0, "costUSD": 0.09},

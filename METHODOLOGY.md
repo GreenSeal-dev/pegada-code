@@ -82,8 +82,11 @@ so repeated ingestion is idempotent.
 ### 2.4 Validation against Claude Code's own totals
 
 Some transcripts contain a `cost-state` line with Claude Code's own per-model
-token totals for the session. In one sample session, the deduplicated transcript
-totals matched it **exactly** for the main model (20 / 1,698 / 624,567 / 34,282
+token totals for the session. It is a **snapshot**, written once and not updated
+as the session continues; its time is `startTime + totalDuration`. It must be
+compared only with records logged up to that time (pegada ≤ 0.2.1 compared it
+with the whole session). In one sample session, whose snapshot was taken at
+the end, the deduplicated transcript totals matched it **exactly** for the main model (20 / 1,698 / 624,567 / 34,282
 input / output / cache-read / cache-write tokens). This validates rules 1–2.
 
 ## 3. Coverage: usage that transcripts do not log
@@ -114,10 +117,15 @@ pegada therefore reports two things:
   lower bound on coverage**.
 - **Unlogged usage** is shown on a separate line, never added to the headline.
   For sessions with a `cost-state`, it is `max(0, totals − logged)` per session,
-  model and token class, estimated with the same coefficients. The report also
-  gives the energy-weighted coverage ratio (mid), and `pegada code coverage`
-  prints the per-session comparison. `cost-state` lines are rare (3 of 23
-  sample files), so this is a diagnostic and not a correction.
+  model and token class, over the records logged **up to the snapshot time**
+  (§2.4), estimated with the same coefficients. The report also gives the
+  energy-weighted coverage ratio (mid), and `pegada code coverage` prints the
+  per-session comparison with the snapshot time. In the session in which
+  pegada-code was built, the time-aligned comparison gave 96.7–99.4% coverage
+  of the main model's cache writes, cache reads and output. Unlogged usage
+  after a snapshot, and in sessions without one, is not captured. `cost-state`
+  lines are rare (3 of 23 sample files), so this is a diagnostic and not a
+  correction.
 
 ## 4. Energy and emissions model
 

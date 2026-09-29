@@ -28,16 +28,29 @@ def _fp_dict(est: Estimator, fp: Footprint) -> Dict[str, Any]:
     return {"messages": fp.messages, "tokens": dict(fp.tokens), **est.impact(fp).to_dict()}
 
 
+def logged_at_snapshot(contents: LedgerContents) -> Dict[tuple, Dict[str, int]]:
+    """Logged tokens per (session, model) for sessions with totals, counting only
+    records up to the time of that session's snapshot (when known)."""
+    cutoff = {t.session_id: t.as_of for t in contents.totals.values()}
+    logged: Dict[tuple, Dict[str, int]] = defaultdict(lambda: {c: 0 for c in TOKEN_CLASSES})
+    for r in contents.records.values():
+        if r.session_id not in cutoff:
+            continue
+        as_of = cutoff[r.session_id]
+        if as_of and r.timestamp and r.timestamp > as_of:
+            continue
+        for c in TOKEN_CLASSES:
+            logged[(r.session_id, r.model)][c] += getattr(r, c)
+    return logged
+
+
 def unlogged(contents: LedgerContents, est: Estimator) -> Optional[Dict[str, Any]]:
     """Usage the agent reports in its own session totals but that no transcript
     line accounts for: ``max(0, totals − logged)`` per session, model and token
     class. Reported separately, never added to the headline."""
     if not contents.totals:
         return None
-    logged: Dict[tuple, Dict[str, int]] = defaultdict(lambda: {c: 0 for c in TOKEN_CLASSES})
-    for r in contents.records.values():
-        for c in TOKEN_CLASSES:
-            logged[(r.session_id, r.model)][c] += getattr(r, c)
+    logged = logged_at_snapshot(contents)
     missing, observed = Footprint(), Footprint()
     by_model: Dict[str, Footprint] = {}
     sessions = set()
@@ -231,11 +244,12 @@ def render_markdown(rep: Dict[str, Any]) -> str:
     if unl:
         u = unl["unlogged"]
         add(f"Claude Code's own session totals are available for {unl['sessions_with_totals']} of "
-            f"{unl['sessions_total']} sessions. In those, transcripts account for "
+            f"{unl['sessions_total']} sessions. These totals are snapshots: up to each snapshot, transcripts account for "
             f"**{fmt.pct(unl['coverage_energy_mid'])}** of the estimated energy (mid). The remainder is estimated at "
             f"**{fmt.interval(_iv(u['energy_wh']), 'Wh', mid=False)}** / "
             f"**{fmt.interval(_iv(u['co2e_g']), 'g', 'CO2e', mid=False)}** "
-            f"(background calls such as title generation, compaction, side queries).")
+            f"(background calls such as title generation, compaction, side queries). Unlogged usage after a "
+            f"snapshot, and in sessions without one, is not captured.")
         for m, d in unl["by_model"].items():
             add(f"- `{m}`: {fmt.tokens(sum(d['tokens'].values()))} tokens → {fmt.interval(_iv(d['energy_wh']), 'Wh', mid=False)}")
     else:

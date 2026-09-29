@@ -5,12 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from collections import defaultdict
 
 from pegada import fmt
 from pegada.ledger import Ledger
 from pegada.records import TOKEN_CLASSES
-from pegada.report import badge, build_report, render_coefficients, render_markdown
+from pegada.report import badge, build_report, logged_at_snapshot, render_coefficients, render_markdown
 from pegada_code.project import estimator_for, ledger_path, project_root
 
 COMMANDS = ("report", "badge", "backfill", "coverage", "coefficients", "ingest", "hook", "statusline", "setup")
@@ -59,19 +58,18 @@ def cmd_coverage(args) -> int:
     if not contents.totals:
         print("No session totals (cost-state) recorded for this project; coverage cannot be checked.")
         return 0
-    logged = defaultdict(lambda: {c: 0 for c in TOKEN_CLASSES})
-    for r in contents.records.values():
-        for c in TOKEN_CLASSES:
-            logged[(r.session_id, r.model)][c] += getattr(r, c)
-    print("| Session | Model | Class | Logged (transcripts) | Reported (session totals) | Coverage |")
-    print("|---|---|---|---:|---:|---:|")
+    logged = logged_at_snapshot(contents)
+    print("Session totals are snapshots; each is compared with the records logged up to its time.\n")
+    print("| Session | Snapshot (UTC) | Model | Class | Logged (transcripts) | Reported (session totals) | Coverage |")
+    print("|---|---|---|---|---:|---:|---:|")
     for t in contents.totals.values():
+        snap = t.as_of[:16].replace("T", " ") if t.as_of else "unknown"
         for model, counts in sorted(t.models.items()):
             for c in TOKEN_CLASSES:
                 got, rep = logged[(t.session_id, model)][c], counts.get(c, 0)
                 if got or rep:
                     cov = fmt.pct(got / rep) if rep else "—"
-                    print(f"| `{t.session_id[:8]}` | `{model}` | {c} | {got:,} | {rep:,} | {cov} |")
+                    print(f"| `{t.session_id[:8]}` | {snap} | `{model}` | {c} | {got:,} | {rep:,} | {cov} |")
     return 0
 
 

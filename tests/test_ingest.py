@@ -60,6 +60,17 @@ class BackfillTest(TempEnvTestCase):
         ingest.backfill(DEMO_ROOT, self.parser)
         totals = self.read().totals
         self.assertEqual(list(totals), ["claude-code:sess-a"])
+        self.assertEqual(totals["claude-code:sess-a"].as_of, "2026-01-01T10:02:30.000Z")
+
+    def test_timestamped_snapshot_replaces_untimestamped_one(self):
+        from dataclasses import replace
+        from pegada.ledger import Ledger as L
+        t = self.parser.parse(os.path.join(FIXTURES, "-work-demo", "sess-a.jsonl")).totals[0]
+        ledger = L(self.ledger_file)
+        self.assertEqual(ledger.append([], [replace(t, as_of="")]), 1)  # as written by pegada 0.2.1
+        self.assertEqual(ledger.append([], [t]), 1)
+        self.assertEqual(ledger.append([], [t]), 0)
+        self.assertEqual(ledger.read().totals["claude-code:sess-a"].as_of, t.as_of)
 
 
 class IncrementalIngestTest(TempEnvTestCase):

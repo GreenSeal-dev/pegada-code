@@ -65,6 +65,7 @@ class ParserTest(unittest.TestCase):
         self.assertEqual(len(tots), 1)
         son = tots[0].models["claude-sonnet-5"]
         self.assertEqual(son, {"input": 113, "cache_write": 2500, "cache_read": 3000, "output": 420})
+        self.assertEqual(tots[0].as_of, "2026-01-01T10:02:30.000Z")
 
     def test_torn_last_line_not_consumed(self):
         path = os.path.join(FIXTURES, "-work-demo", "sess-b.jsonl")

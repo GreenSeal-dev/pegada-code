@@ -41,6 +41,21 @@ class ReportTest(TempEnvTestCase):
         self.assertEqual(without["total"], rep["total"])
         self.assertIsNone(without["unlogged"])
 
+    def test_unlogged_compares_only_records_before_the_snapshot(self):
+        from dataclasses import replace
+        from pegada.ledger import LedgerContents
+        # A response after the 10:02:30 snapshot must not reduce the unlogged estimate.
+        late = replace(self.contents.records["msg_a2"], msg_id="msg_late", timestamp="2026-01-01T12:00:00.000Z",
+                       input=100, cache_read=1000)
+        recs = dict(self.contents.records, msg_late=late)
+        u = self.report(LedgerContents(records=recs, totals=self.contents.totals))["unlogged"]
+        self.assertEqual(u["by_model"]["claude-sonnet-5"]["tokens"],
+                         {"input": 100, "cache_write": 0, "cache_read": 1000, "output": 0})
+        # Without a snapshot time, everything logged in the session is compared (older ledgers).
+        tots = {k: replace(t, as_of="") for k, t in self.contents.totals.items()}
+        u = self.report(LedgerContents(records=recs, totals=tots))["unlogged"]
+        self.assertNotIn("claude-sonnet-5", u["by_model"])
+
     def test_breakdowns(self):
         rep = self.report()
         self.assertEqual(rep["total"]["messages"], 5)

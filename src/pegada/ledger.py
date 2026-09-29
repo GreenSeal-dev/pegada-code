@@ -17,6 +17,7 @@ from pegada.records import (
     UsageRecord,
     merge_record,
     merge_totals,
+    totals_supersede,
 )
 
 try:
@@ -86,7 +87,7 @@ class Ledger:
             for t in totals:
                 key = f"{t.agent}:{t.session_id}"
                 prev_t = current.totals.get(key)
-                if prev_t is None or t.total_tokens > prev_t.total_tokens:
+                if totals_supersede(t, prev_t):
                     current.totals[key] = t
                     lines.append(json.dumps(t.to_dict(), separators=(",", ":")))
             if lines:

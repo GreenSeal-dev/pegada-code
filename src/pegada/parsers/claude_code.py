@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from pegada.parsers.base import ParseResult
@@ -221,4 +222,15 @@ class ClaudeCodeParser:
                 models[str(model)] = counts
         if not models:
             return None
-        return SessionTotals(agent=self.agent, session_id=str(sid), source="claude-code:cost-state", models=models)
+        return SessionTotals(agent=self.agent, session_id=str(sid), source="claude-code:cost-state",
+                             models=models, as_of=self._snapshot_time(obj))
+
+    @staticmethod
+    def _snapshot_time(obj: Dict[str, Any]) -> str:
+        """``cost-state`` is written once as a snapshot (not updated as the session
+        continues). Its time is the process start plus the elapsed duration."""
+        start, duration = obj.get("startTime"), obj.get("totalDuration")
+        if not isinstance(start, (int, float)) or not isinstance(duration, (int, float)):
+            return ""
+        t = datetime.fromtimestamp((start + duration) / 1000.0, timezone.utc)
+        return t.strftime("%Y-%m-%dT%H:%M:%S.") + f"{t.microsecond // 1000:03d}Z"

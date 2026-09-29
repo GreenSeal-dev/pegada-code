@@ -88,13 +88,16 @@ class SessionTotals:
     """Per-model token totals that the agent itself reports for a session.
 
     Used only to quantify usage that transcripts do not log (see METHODOLOGY,
-    "Coverage"); never added to headline figures.
+    "Coverage"); never added to headline figures. The totals are a snapshot:
+    ``as_of`` (ISO 8601, UTC) is when they were taken, so they must only be
+    compared with records logged up to that time. Empty when unknown.
     """
 
     agent: str
     session_id: str
     source: str
     models: Dict[str, Dict[str, int]]
+    as_of: str = ""
 
     @property
     def total_tokens(self) -> int:
@@ -108,6 +111,7 @@ class SessionTotals:
             "session_id": self.session_id,
             "source": self.source,
             "models": self.models,
+            **({"as_of": self.as_of} if self.as_of else {}),
         }
 
     @classmethod
@@ -121,6 +125,7 @@ class SessionTotals:
             session_id=str(d.get("session_id", "")),
             source=str(d.get("source", "")),
             models=models,
+            as_of=str(d.get("as_of", "")),
         )
 
 
@@ -155,12 +160,19 @@ def merge_records(records: Iterable[UsageRecord]) -> Dict[str, UsageRecord]:
     return out
 
 
+def totals_supersede(new: SessionTotals, old: Optional[SessionTotals]) -> bool:
+    """Snapshots are cumulative: a larger one is later. A timestamped copy of
+    the same snapshot replaces an untimestamped one (older ledgers)."""
+    if old is None or new.total_tokens > old.total_tokens:
+        return True
+    return new.total_tokens == old.total_tokens and bool(new.as_of) and not old.as_of
+
+
 def merge_totals(totals: Iterable[SessionTotals]) -> Dict[str, SessionTotals]:
-    """Keep, per (agent, session), the largest reported totals (they are cumulative)."""
+    """Keep, per (agent, session), the latest (largest) snapshot."""
     out: Dict[str, SessionTotals] = {}
     for t in totals:
         key = f"{t.agent}:{t.session_id}"
-        prev = out.get(key)
-        if prev is None or t.total_tokens > prev.total_tokens:
+        if totals_supersede(t, out.get(key)):
             out[key] = t
     return out
