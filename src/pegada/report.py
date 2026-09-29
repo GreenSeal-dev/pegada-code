@@ -45,12 +45,12 @@ def unlogged(contents: LedgerContents, est: Estimator) -> Optional[Dict[str, Any
         sessions.add(t.session_id)
         for model, counts in t.models.items():
             diff = {c: max(0, counts.get(c, 0) - logged[(t.session_id, model)][c]) for c in TOKEN_CLASSES}
-            fam = est.family(model)
-            missing.add_counts(fam, diff, messages=0)
-            by_model.setdefault(model, Footprint()).add_counts(fam, diff, messages=0)
+            # messages=0: the number of unlogged calls is unknown, so no per-response term.
+            est.add(missing, model, diff, messages=0)
+            est.add(by_model.setdefault(model, Footprint()), model, diff, messages=0)
         for (sid, model), counts in logged.items():
             if sid == t.session_id:
-                observed.add_counts(est.family(model), counts, messages=0)
+                est.add(observed, model, counts, messages=0)
     obs_mid = est.impact(observed).energy_wh.mid
     miss_mid = est.impact(missing).energy_wh.mid
     return {
@@ -96,6 +96,11 @@ def build_report(contents: LedgerContents, est: Estimator, project: str = "", to
             f"{len(est.unknown_models)} model(s) not recognised, estimated with the wide fallback coefficients: "
             + ", ".join(sorted(est.unknown_models))
         )
+    if est.approximated:
+        warnings.append(
+            "Model(s) not in EcoLogits, estimated with another model's data or their tier's envelope: "
+            + ", ".join(f"{m} → {f}" for m, f in sorted(est.approximated.items()))
+        )
     if contents.bad_lines:
         warnings.append(f"{contents.bad_lines} unreadable ledger line(s) were skipped.")
 
@@ -107,6 +112,7 @@ def build_report(contents: LedgerContents, est: Estimator, project: str = "", to
         "coefficients_version": est.coefficients.version,
         "uses_placeholders": est.uses_placeholders,
         "parameters": {n: {**getattr(p, n).value.to_dict(), "unit": getattr(p, n).unit, "status": getattr(p, n).status} for n in Parameters.NAMES},
+        "embodied_per_family": p.embodied.status != "USER",
         "period": {"first": timestamps[0] if timestamps else None, "last": timestamps[-1] if timestamps else None},
         "sessions": len(by_session),
         "total": {"messages": total.messages, "tokens": dict(total.tokens), **impact.to_dict()},
@@ -118,6 +124,11 @@ def build_report(contents: LedgerContents, est: Estimator, project: str = "", to
                 "energy_wh": (total.it_energy[c] * p.pue.value).to_dict(),
             }
             for c in TOKEN_CLASSES
+        },
+        "per_response": {
+            "responses": total.messages,
+            "energy_share_mid": total.it_energy["request"].mid / it_mid_total,
+            "energy_wh": (total.it_energy["request"] * p.pue.value).to_dict(),
         },
         "by_model": {
             m: {"family": est.coefficients.lookup(m)[0].id, **_fp_dict(est, fp)}
@@ -179,6 +190,9 @@ def render_markdown(rep: Dict[str, Any]) -> str:
         name = f"**{CLASS_LABELS[c]}**" if c == "cache_read" else CLASS_LABELS[c]
         add(f"| {name} | {fmt.tokens(tc['tokens'])} | {fmt.pct(tc['token_share'])} | "
             f"{fmt.pct(tc['energy_share_mid'])} | {fmt.interval(_iv(tc['energy_wh']), 'Wh', mid=False)} |")
+    pr = rep["per_response"]
+    add(f"| Per-response overhead | {pr['responses']:,} responses | — | {fmt.pct(pr['energy_share_mid'])} | "
+        f"{fmt.interval(_iv(pr['energy_wh']), 'Wh', mid=False)} |")
     cr = rep["token_classes"]["cache_read"]
     add("")
     add(f"Cache reads are **{fmt.pct(cr['token_share'])} of all tokens** but **{fmt.pct(cr['energy_share_mid'])} of the "
@@ -245,7 +259,13 @@ def render_markdown(rep: Dict[str, Any]) -> str:
     add(f"- Coefficients `{rep['coefficients_version']}` · pegada {rep['pegada_version']}")
     for n, label in (("pue", "PUE"), ("grid_intensity", "Grid intensity"), ("embodied", "Embodied")):
         pv = params[n]
-        add(f"- {label}: {fmt.sig(pv['low'])}–{fmt.sig(pv['high'])} (mid {fmt.sig(pv['mid'])}) {pv['unit']} [{pv['status']}]")
+        if n == "embodied" and rep.get("embodied_per_family"):
+            add("- Embodied: per model family, derived from EcoLogits (see `/pegada coefficients`)")
+            continue
+        if pv["low"] == pv["high"]:
+            add(f"- {label}: {fmt.sig(pv['mid'])} {pv['unit']} [{pv['status']}]")
+        else:
+            add(f"- {label}: {fmt.sig(pv['low'])}–{fmt.sig(pv['high'])} (mid {fmt.sig(pv['mid'])}) {pv['unit']} [{pv['status']}]")
     add(f"- Method, sources and limitations: {METHODOLOGY_URL}")
     for w in rep["warnings"]:
         add(f"- ⚠️ {w}")
@@ -267,17 +287,26 @@ def badge(rep: Dict[str, Any], label: str = "AI coding CO2e", link: str = METHOD
 
 def render_coefficients(est: Estimator) -> str:
     cs = est.coefficients
+    trip = lambda i: f"{fmt.sig(i.low)} / {fmt.sig(i.mid)} / {fmt.sig(i.high)}" if i.low != i.high else fmt.sig(i.mid)
     L = [f"## Coefficients `{cs.version}`", "", f"Source file: `{cs.path}`", "",
-         "Wh (IT) per 1M tokens, low / mid / high.", "",
-         "| Family | Patterns | Prefill | Cache read | Decode | Status |", "|---|---|---|---|---|---|"]
+         "Token coefficients: Wh (IT) per 1M tokens · per response: Wh (IT) · embodied: gCO2e per kWh IT. "
+         "Values are low / mid / high.", "",
+         "| Family | Prefill | Cache read | Decode | Per response | Embodied | Status |",
+         "|---|---|---|---|---|---|---|"]
     for f in cs.families + [cs.fallback]:
-        cells = [f"{fmt.sig(i.low)} / {fmt.sig(i.mid)} / {fmt.sig(i.high)}" for i in (f.e_prefill, f.e_cache, f.e_decode)]
-        L.append(f"| {f.id} | {', '.join(f'`{p}`' for p in f.match) or '(fallback)'} | {' | '.join(cells)} | {f.status} |")
-    L += ["", "Sources:", ""] + [f"- **{f.id}**: {f.source}" for f in cs.families + [cs.fallback]]
+        emb = trip(f.embodied) if f.embodied is not None else "(global)"
+        name = f.id + (" *" if f.approximation else "")
+        L.append(f"| {name} | {trip(f.e_prefill)} | {trip(f.e_cache)} | {trip(f.e_decode)} | "
+                 f"{trip(f.e_request)} | {emb} | {f.status} |")
+    approx = [f for f in cs.families + [cs.fallback] if f.approximation]
+    if approx:
+        L += ["", "\\* " + " ".join(sorted({f.approximation for f in approx}))]
+    sources = sorted({f.source for f in cs.families + [cs.fallback] if f.source and "Envelope" not in f.source})
+    L += ["", "Sources:", ""] + [f"- {s}" for s in sources]
     L += ["", "## Parameters", ""]
     for n in Parameters.NAMES:
         p = getattr(est.parameters, n)
-        L.append(f"- **{n}** = {fmt.sig(p.value.low)} / {fmt.sig(p.value.mid)} / {fmt.sig(p.value.high)} {p.unit} [{p.status}]: {p.source}")
+        L.append(f"- **{n}** = {trip(p.value)} {p.unit} [{p.status}]: {p.source}")
     return "\n".join(L)
 
 

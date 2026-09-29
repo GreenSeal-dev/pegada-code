@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from pegada.interval import Interval
+from pegada.interval import ZERO, Interval
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 DEFAULT_COEFFICIENTS = os.path.join(DATA_DIR, "coefficients.json")
@@ -24,9 +24,12 @@ class Family:
     e_prefill: Interval
     e_cache: Interval
     e_decode: Interval
+    e_request: Interval = ZERO  # Wh per model response
+    embodied: Optional[Interval] = None  # gCO2e per kWh IT; None → global parameter
     status: str = ""
     source: str = ""
     notes: str = ""
+    approximation: str = ""  # set when the model is estimated with another model's data
 
     @property
     def is_placeholder(self) -> bool:
@@ -40,9 +43,12 @@ class Family:
             e_prefill=Interval.parse(d["e_prefill"]),
             e_cache=Interval.parse(d["e_cache"]),
             e_decode=Interval.parse(d["e_decode"]),
+            e_request=Interval.parse(d["e_request"]) if "e_request" in d else ZERO,
+            embodied=Interval.parse(d["embodied"]) if "embodied" in d else None,
             status=str(d.get("status", "")),
             source=str(d.get("source", "")),
             notes=str(d.get("notes", "")),
+            approximation=str(d.get("approximation", "")),
         )
 
 

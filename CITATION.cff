@@ -7,7 +7,7 @@ authors:
     given-names: Luís
     email: luis@greenseal.dev
     affiliation: GreenSeal
-version: 0.1.0
+version: 0.2.0
 date-released: 2026-09-29
 license: Apache-2.0
 repository-code: "https://github.com/GreenSeal-dev/pegada-code"

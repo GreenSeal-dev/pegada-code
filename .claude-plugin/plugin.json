@@ -1,7 +1,7 @@
 {
   "name": "pegada-code",
   "displayName": "pegada-code",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Estimate the energy (Wh) and carbon (gCO2e) footprint of AI coding agents per project, from tokens and model, always as low/mid/high intervals.",
   "author": { "name": "Luís Cruz", "email": "luis@greenseal.dev" },
   "homepage": "https://github.com/GreenSeal-dev/pegada-code",

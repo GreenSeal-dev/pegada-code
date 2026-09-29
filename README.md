@@ -5,9 +5,10 @@
 *Pegada* is Portuguese for *footprint*. pegada-code is the first tool of the pegada family: a Claude Code plugin
 backed by `pegada`, a small, dependency-free Python engine that other agent integrations can reuse.
 
-> ⚠️ **v0.1.0 ships with PLACEHOLDER coefficients.** The pipeline (parsing, deduplication, ledger, intervals,
-> reports) is complete and tested. The per-token energy values are not calibrated yet, so do not cite the
-> absolute numbers. See [METHODOLOGY.md](METHODOLOGY.md).
+> **Coefficients v0.2.0 are derived, not measured.** Output-token, per-response and embodied values follow
+> [EcoLogits](https://ecologits.ai). Prompt-token (prefill) and cache-read values are first-principles estimates
+> on EcoLogits' hardware assumptions. Every value is a range with a cited source; see
+> [METHODOLOGY.md](METHODOLOGY.md).
 
 ## What it does
 
@@ -63,7 +64,7 @@ Optional, per project, in `.claude/pegada.config.json`:
 ```json
 {
   "grid_intensity": {"low": 250, "mid": 300, "high": 400, "source": "assumed serving region"},
-  "pue": 1.15,
+  "pue": 1.1,
   "embodied": {"low": 20, "mid": 40, "high": 80},
   "coefficients_file": "calibration/coefficients.json",
   "share": false
@@ -86,7 +87,7 @@ transcripts (~/.claude/projects/**.jsonl)
    │          subagent files + agent type, skip <synthetic>
    ▼
 .claude/pegada.jsonl  (token counts only; append-only, idempotent)
-   │  estimator: E_IT = e_prefill·(input+cache_write) + e_cache·cache_read + e_decode·output
+   │  estimator: E_IT = e_prefill·(input+cache_write) + e_cache·cache_read + e_decode·output + e_request
    │             E = PUE·E_IT ;  CO2e = E·grid + E_IT·embodied      (every term low/mid/high)
    ▼
 /pegada report · status line · badge
@@ -98,7 +99,8 @@ Repository layout:
 |---|---|
 | `src/pegada/` | core engine (agent-agnostic): records, parsers, coefficients, estimator, ledger, report |
 | `src/pegada/parsers/claude_code.py` | Claude Code transcript parser (add `codex.py`, `gemini.py` … next to it) |
-| `src/pegada/data/` | `coefficients.json`, `parameters.json` |
+| `src/pegada/data/` | `coefficients.json` (generated), `parameters.json` |
+| `calibration/` | `derive_coefficients.py` (EcoLogits + first principles), pinned EcoLogits model data |
 | `src/pegada_code/` | Claude Code integration: hooks, status line, setup, CLI |
 | `skills/`, `hooks/`, `bin/`, `.claude-plugin/` | plugin and marketplace |
 | `tests/` | `python3 -m unittest discover -s tests -t tests` |
@@ -106,12 +108,12 @@ Repository layout:
 ## Related work
 
 - **[EcoLogits](https://ecologits.ai)** (GenAI Impact) estimates the energy and multi-criteria environmental
-  impacts (GWP, ADP, PE) of API-based LLM inference per request, following an LCA approach. It models energy
-  per output token from the models' (estimated) active parameters, and allocates embodied impacts by
-  request time. pegada-code's coefficients are meant to be calibrated in line with EcoLogits (see
-  [METHODOLOGY.md §4.2](METHODOLOGY.md#42-coefficients)). pegada-code adds per-token-class coefficients,
-  because a coding agent's footprint is dominated by cache reads, which output-token models do not
-  distinguish.
+  impacts (GWP, ADP, PE) of API-based LLM inference per request, following an LCA approach. pegada-code's
+  output-token, per-response and embodied values are computed with EcoLogits itself
+  ([calibration/derive_coefficients.py](calibration/derive_coefficients.py)). EcoLogits attributes GPU energy to
+  output tokens only. A coding agent's tokens are mostly cached context, so pegada-code adds first-principles
+  prefill and cache-read terms, and uses a consequential industry-average PUE instead of the provider's
+  (see [METHODOLOGY.md §4](METHODOLOGY.md#4-energy-and-emissions-model)).
 - **CNaught**'s [coding-agent-emissions](https://github.com/CNaught-Inc/coding-agent-emissions) estimates
   the aggregate emissions of AI coding agents from their public GitHub activity
   ([blog](https://www.cnaught.com/blog/ai-coding-agents-are-emitting-250-000-tonnes-of-carbon-emissions-each-year-heres-how-we-got-there)).
@@ -134,7 +136,7 @@ If you use pegada-code in research, please cite it (see [CITATION.cff](CITATION.
   author  = {Cruz, Luís},
   title   = {pegada-code: energy and carbon footprint estimates for AI coding agents},
   year    = {2026},
-  version = {0.1.0},
+  version = {0.2.0},
   url     = {https://github.com/GreenSeal-dev/pegada-code},
   license = {Apache-2.0}
 }

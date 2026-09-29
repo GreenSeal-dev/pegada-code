@@ -48,7 +48,7 @@ def session_line(payload: Dict[str, Any]) -> str:
     est = estimator_for(project_root(ws.get("project_dir") or payload.get("cwd")))
     fp = Footprint()
     for model, *counts in msgs.values():
-        fp.add_counts(est.family(model), dict(zip(TOKEN_CLASSES, counts)))
+        est.add(fp, model, dict(zip(TOKEN_CLASSES, counts)))
     return impact_line(est.impact(fp))
 
 

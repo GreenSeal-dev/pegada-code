@@ -6,4 +6,4 @@ energy and emissions intervals, and the ledger stores token counts (never
 estimates) so results can be recomputed whenever coefficients are recalibrated.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

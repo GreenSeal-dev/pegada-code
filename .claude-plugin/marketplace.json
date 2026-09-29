@@ -7,7 +7,7 @@
       "name": "pegada-code",
       "source": "./",
       "description": "Energy and carbon footprint estimates (low/mid/high) for Claude Code usage in a project.",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   ]
 }

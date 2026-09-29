@@ -5,10 +5,11 @@ greenhouse-gas estimates, what it assumes, how uncertain the result is, and what
 it leaves out. It is versioned with the code; every report names the
 coefficient version it used.
 
-> **Status (v0.1.0): the bundled coefficients are PLACEHOLDERS.** They are
-> order-of-magnitude values that exercise the pipeline and have not been
-> calibrated or measured. Reports print a warning while any placeholder is in
-> use. Do not cite absolute figures produced with them.
+> **Status (v0.2.0): coefficients DERIVED.** Decode, per-response and embodied
+> values come from EcoLogits. Prefill and cache-read values are first-principles
+> estimates on the same hardware assumptions (§4.2). No coefficient has been
+> measured on Anthropic's infrastructure, which is not possible from outside.
+> The ranges express that.
 
 ## 1. Scope
 
@@ -116,61 +117,128 @@ For each model response *r* of a model in family *f*:
 ```
 E_IT(r)  = e_prefill(f) · (input + cache_write)
          + e_cache(f)   · cache_read
-         + e_decode(f)  · output                      [Wh; coefficients in Wh per 1M tokens]
+         + e_decode(f)  · output
+         + e_request(f)                               [Wh; token coefficients in Wh per 1M tokens]
 
 E(r)     = PUE · E_IT(r)                              [Wh, facility energy]
-CO2e(r)  = E(r) · I_grid / 1000  +  E_IT(r) · k_emb / 1000   [gCO2e]
+CO2e(r)  = E(r) · I_grid / 1000  +  E_IT(r) · k_emb(f) / 1000   [gCO2e]
 ```
 
+- `e_request` is a fixed IT energy per model response (Wh).
 - `I_grid` is the location-based grid carbon intensity (gCO2e/kWh).
-- `k_emb` is embodied emissions per kWh of **IT** energy (gCO2e/kWh): the
-  serving hardware's manufacturing emissions divided by the IT energy it uses
-  over its lifetime. Embodied emissions are therefore allocated in proportion to
-  compute energy and are independent of grid intensity and PUE.
+- `k_emb(f)` is embodied emissions per kWh of **IT** energy (gCO2e/kWh) for the
+  hardware serving family *f*. Embodied emissions are therefore allocated in
+  proportion to compute energy and do not depend on grid intensity or PUE.
 
-### 4.1 Why three token coefficients
+### 4.1 Why separate prefill, cache-read and decode coefficients
 
 - **Prefill** (uncached input and cache writes) processes prompt tokens in
-  parallel. Its per-token cost is much lower than decoding but not negligible.
-  Cache writes are prefilled like uncached input; the extra cost of storing the
-  KV cache is assumed to be negligible.
-- **Cache reads** skip prefill computation but still load stored key/value
-  tensors and attend over them. Their per-token cost is assumed to be well
-  below prefill and is **the most uncertain coefficient**. It also matters
-  most: agents re-send their growing context on every step, so cache reads
-  typically make up over 95% of a coding agent's tokens.
+  parallel and is compute-bound. Its per-token cost is much lower than
+  decoding. Cache writes are prefilled like uncached input; the energy of
+  storing the key/value (KV) cache is assumed to be negligible.
+- **Cache reads** skip the prefill matrix multiplications. What remains is the
+  attention of the response's new tokens over the cached KV entries. Coding
+  agents re-send their growing context on every step, so cache reads are
+  typically over 95% of their tokens, and this is the most uncertain
+  coefficient.
 - **Decode** (output) generates tokens one by one and is memory-bandwidth
-  bound. It has the highest per-token cost.
+  bound. It has by far the highest per-token cost.
 
-This per-token-class form is a deliberate simplification. It ignores batch
-size, context length effects on attention cost, hardware generation, and
-speculative decoding.
+This per-token-class form is a simplification. It ignores the dependence of
+attention cost on context length within a response, as well as batching
+dynamics, hardware generation and speculative decoding.
 
-### 4.2 Coefficients
+### 4.2 Coefficients (v0.2.0)
 
-`src/pegada/data/coefficients.json` is versioned (`coefficients_version`). Each
-model family has:
+`src/pegada/data/coefficients.json` is **generated** by
+`calibration/derive_coefficients.py`; `--check` verifies that the committed
+file is reproducible. Each family has ordered glob patterns matched against
+the lower-cased model id (Bedrock and Vertex ids match too), `{low, mid,
+high}` triples, a `status`, a `source`, and a `derivation` block with every
+input. `pegada code coefficients` prints the active table.
 
-- ordered glob patterns matched against the lower-cased model id (so Bedrock
-  and Vertex ids also match);
-- a `{low, mid, high}` triple for each of `e_prefill`, `e_cache` and `e_decode`;
-- a `status` (`PLACEHOLDER`, or e.g. `MEASURED`/`DERIVED` once calibrated) and
-  a free-text `source` citation.
+**EcoLogits alignment.** Equations and constants come from EcoLogits 0.11.1
+(`ecologits/impacts/llm.py`). That release predates the Claude 5 models, so
+model data (parameter estimates, throughput, time to first token) comes from
+the EcoLogits model repository at commit `2b36303` (21 Sep 2026). Its
+`llm.py` is byte-identical to 0.11.1's. The file is vendored in
+`calibration/data/` and checked against its SHA-256.
 
-An unrecognised model is estimated with a deliberately wide `fallback` entry,
-and the report names it in a warning. `pegada code coefficients` prints the
-active table with its sources.
+| Term | Source | How |
+|---|---|---|
+| `e_decode` | EcoLogits | GPU energy per output token `(α·e^(β·64)·P_active + γ)` × GPU count, plus the non-GPU server share (1.2 kW per 8 GPUs) over `1/TPS`, both divided by EcoLogits' batch size of 64. Exactly EcoLogits' IT energy per output token. |
+| `e_request` | EcoLogits | EcoLogits' request IT energy for zero output tokens: the non-GPU server share during time to first token (TTFT). |
+| `k_emb` | EcoLogits | EcoLogits' time-allocated embodied GWP per output token (H100: 273 kgCO2e; server: 5,700 kgCO2e per 8 GPUs; 3-year lifetime) ÷ its IT energy per output token. |
+| `e_prefill` | first principles | `2·P_active` FLOPs per token ÷ (MFU × 989.4 TFLOP/s BF16 dense) × (700 W GPU + 150 W non-GPU share). |
+| `e_cache` | first principles | Per cached token: `N_out · KV_bytes · ε_byte + N_new · F_pair · ε_FLOP` (see below). |
 
-**Calibration (to do).** The intention is to align with
-[EcoLogits](https://ecologits.ai), which models energy per output token as a
-function of (estimated) active parameters, with server overheads and PUE, and
-allocates embodied impacts by request time. Deriving `e_decode` from EcoLogits'
-per-output-token model for each family's assumed parameter range is
-straightforward. `e_prefill` and `e_cache` need an additional assumption,
-because EcoLogits is driven by output tokens and latency rather than by input
-token classes. Alternative coefficients can be used without code changes, via
-`coefficients_file` in `.claude/pegada.config.json` or the
-`PEGADA_COEFFICIENTS` environment variable.
+*Low/mid/high.* The active parameters are EcoLogits' min / midpoint / max.
+For a dense model the total follows the same scenario, as in EcoLogits, which
+changes the GPU count. First-principles constants take their low/mid/high
+value in the same scenario:
+
+| Constant | low | mid | high | Basis |
+|---|---:|---:|---:|---|
+| Prefill MFU | 0.60 | 0.45 | 0.30 | Typical compute-bound serving utilisation (high MFU → low energy) |
+| KV bytes per cached token | 70,272 | 192,512 | 516,096 | DeepSeek-V3 (MLA), Qwen3-235B-A22B (GQA-4), Llama-3.1-405B (GQA-8), BF16 |
+| Attention FLOPs per (query, cached token) pair | 3.08 M | 5.00 M | 8.26 M | Same three architectures, QKᵀ + AV over all layers |
+| ε_byte, energy per KV byte read (J) | 3.1e-11 | 8.9e-11 | 2.5e-10 | low: HBM access ≈3.9 pJ/bit (O'Connor et al., MICRO 2017); high: 850 W for the read time at 3.35 TB/s; mid: geometric mean |
+| N_out, output tokens per response | 205 | 347 | 580 | Cache-read-weighted quartiles, 1,006 Claude Code responses (§4.2.1) |
+| N_new, new input tokens per response | 420 | 648 | 1,318 | Same |
+
+Hardware figures are from the NVIDIA H100 SXM datasheet (700 W TDP, 989.4
+TFLOP/s dense BF16, 3.35 TB/s HBM3). The 150 W non-GPU share per GPU is
+EcoLogits' 1.2 kW per 8-GPU server.
+
+**4.2.1 Calibration sample.** `N_out` and `N_new` are the only quantities
+taken from observed usage: 1,006 responses with cache reads, from the
+author's Claude Code transcripts (5 projects, Claude Code 2.1.x, July–September
+2026). They are weighted by cache-read tokens, because that is what a
+per-cached-token cost averages over. Only these six numbers are published.
+
+**Resulting values (Wh IT per 1M tokens; low / mid / high):**
+
+| Family | Prefill | Cache read | Decode | Per response (Wh) | Embodied (g/kWh IT) |
+|---|---|---|---|---|---|
+| claude-haiku-4-5 | 8.0 / 24 / 56 | 0.64 / 3.4 / 30 | 57 / 64 / 143 | 0.0004–0.0007 | 39 / 43 / 48 |
+| claude-sonnet-5 | 23 / 62 / 140 | 0.64 / 3.4 / 30 | 1,081 / 1,349 / 1,618 | 0.024 | 26 / 31 / 39 |
+| claude-sonnet-4-5 | 35 / 93 / 210 | 0.64 / 3.4 / 30 | 1,303 / 1,704 / 2,105 | 0.012 | 30 / 37 / 49 |
+| claude-opus-5 (and 5-5) | 53 / 142 / 318 | 0.64 / 3.4 / 30 | 2,803 / 4,015 / 5,227 | 0.070 | 14 / 18 / 25 |
+| claude-fable-5 | 107 / 283 / 636 | 0.64 / 3.4 / 30 | 8,160 / 13,010 / 17,850 | 0.20 | 9.6 / 13 / 21 |
+
+Other Opus 4.x, Sonnet 4.6 and Fable 5.1 entries are in the file. At the mid
+values, prefill costs about 2–9% of decode per token, and a cache read about
+5% of a Sonnet 5 prefill token. For comparison, Anthropic prices a cache read
+at 10% of an uncached input token. Prices are not energy, but the orders of
+magnitude agree.
+
+**Models outside EcoLogits.**
+- `claude-opus-5-5` uses `claude-opus-5`'s data.
+- Other Claude models without an EcoLogits entry (e.g. `claude-sonnet-4`,
+  `claude-3-5-haiku`) use the envelope of their tier: minimum low, median mid,
+  maximum high over the tier's families.
+- Any other model uses the envelope of all families (`unknown`).
+
+Reports name every approximated or unknown model in a warning.
+
+**Alternative coefficients.** Set `coefficients_file` in
+`.claude/pegada.config.json` or the `PEGADA_COEFFICIENTS` environment
+variable. Any file in the same schema works, including hand-made ones marked
+`PLACEHOLDER`; reports then show a warning banner.
+
+**Caveats.**
+1. `e_cache` is not model-specific. Frontier architectures (layers, KV heads)
+   are unpublished, so one range spanning three open architectures is used
+   for all families.
+2. Taken together, EcoLogits' energy and latency models imply more than the
+   700 W TDP per GPU (for example, Sonnet 5 at 64 × 62 tokens/s). pegada
+   adopts EcoLogits' values as-is for alignment.
+3. EcoLogits' decode energy was fitted on open models at moderate context
+   lengths, so part of the cost of decoding against long contexts may already
+   be inside `e_decode`. The decode term of `e_cache` may partly double-count
+   it, which pushes the estimate upward.
+4. EcoLogits assumes 16-bit weights. FP8 serving would lower prefill and
+   decode energy, which the low bound does not capture.
 
 ### 4.3 Infrastructure parameters (defaults)
 
@@ -180,9 +248,19 @@ optional `source`).
 
 | Parameter | low | mid | high | Status | Basis |
 |---|---:|---:|---:|---|---|
-| PUE | 1.10 | 1.20 | 1.56 | DEFAULT | Hyperscale fleet PUE (~1.1) up to the Uptime Institute 2024 industry average (1.56) |
-| Grid intensity (gCO2e/kWh) | 50 | 370 | 700 | DEFAULT | mid ≈ US average (EIA 2023, ~367 g); low/high = low-carbon vs coal-heavy grids. Location-based; certificates/PPAs not credited |
-| Embodied (gCO2e per kWh IT) | 10 | 40 | 150 | PLACEHOLDER | ~3–10 tCO2e per 8-GPU server over ~125 MWh lifetime IT energy |
+| PUE | 1.36 | 1.36 | 1.36 | DEFAULT | Uptime Institute Global Data Center Survey 2026, capacity-weighted average (Uptime Intelligence, 6 Aug 2026). Point value, see below |
+| Grid intensity (gCO2e/kWh) | 50 | 384 | 700 | DEFAULT | mid: EcoLogits 0.11.1 USA electricity mix; low/high: indicative spread between low-carbon and coal-heavy grids (not from a dataset). Location-based: certificates and PPAs are not credited |
+| Embodied (gCO2e per kWh IT) | 9.6 | 30 | 97 | DERIVED | Only for families without their own factor (all bundled families have one): envelope of the per-family EcoLogits values |
+
+**PUE: consequential framing.** pegada does not use the provider's own PUE
+(EcoLogits uses 1.09–1.14 for Anthropic on AWS/Google). An efficient
+hyperscale facility serving this load displaces other load onto the rest of
+the fleet, so the relevant value is the industry average, weighted by
+capacity: this reflects where IT load actually runs, and gives 1.36. The
+per-facility average is 1.52; the 2025 survey reported 1.54. PUE is a point
+value by design: under this framing, which facility hosts the model does not
+matter. It is also a minor source of uncertainty compared with the per-token
+coefficients.
 
 The serving provider, data centre, region and hardware are not disclosed.
 Transcripts carry an `inference_geo` field, which pegada records, but it is
@@ -193,16 +271,16 @@ Example `.claude/pegada.config.json`:
 ```json
 {
   "grid_intensity": {"low": 250, "mid": 300, "high": 400, "source": "my assumption about the serving region"},
-  "pue": 1.15,
-  "coefficients_file": "calibration/coefficients-v1.json"
+  "pue": 1.1,
+  "coefficients_file": "calibration/my-coefficients.json"
 }
 ```
 
 ## 5. Uncertainty
 
-Every input (three coefficients per family, PUE, grid intensity, embodied
-factor) is a `(low, mid, high)` triple. Because the model is a sum of products
-of non-negative terms, pegada uses interval arithmetic:
+Every coefficient and parameter is a `(low, mid, high)` triple; a point value
+has three equal entries. The model is a sum of products of non-negative
+terms, so pegada uses interval arithmetic:
 
 - **low** combines all low values, **high** combines all high values, and
   **mid** combines all mid values;
@@ -213,11 +291,18 @@ of non-negative terms, pegada uses interval arithmetic:
 
 Reports always show the range, and the mid value is labelled as such. pegada
 never outputs a single number. Monte Carlo propagation with explicit
-distributions is a possible extension once coefficients are calibrated.
+distributions is a possible extension.
+
+Where the width comes from, in decreasing order of typical impact on a coding
+agent's footprint: cache-read energy (a factor of about 50 between low and
+high), grid intensity (about 14), prefill energy (about 6), then decode
+energy and embodied factor (about 1.5–2.5 within a family). PUE contributes
+none.
 
 Uncertainty that this envelope does **not** capture:
 
-- **model error**, i.e. the per-token-class form itself (§4.1);
+- **model error**, i.e. the per-token-class form itself (§4.1), and the
+  EcoLogits model it builds on;
 - **coverage**, i.e. unlogged calls (§3), which are reported separately;
 - **fast mode** (`speed: "fast"`): recorded and counted, but it may run on
   different hardware or batching, and it uses the same coefficients;
@@ -240,16 +325,22 @@ Uncertainty that this envelope does **not** capture:
 
 ## 7. Limitations (summary)
 
-1. The coefficients are placeholders (v0.1.0).
+1. No coefficient is measured on Anthropic's infrastructure. Decode,
+   per-response and embodied values inherit EcoLogits' assumptions (parameter
+   estimates, H100 hardware, batch size 64, throughput data). Prefill and
+   cache-read values are first-principles estimates (§4.2), and the cache-read
+   value is not model-specific.
 2. The serving hardware, region, data centre, batch sizes and utilisation are
-   unknown, and all of them are folded into the coefficient ranges.
+   unknown and are folded into the ranges. PUE is set by a consequential
+   choice (§4.3), not a measurement.
 3. Transcript coverage is incomplete (§3), so the headline is a lower bound on
    usage.
 4. The transcript format is undocumented and may change. The parser is
    defensive and tested, but it can break silently on a new format. The
    `coverage` check is the recommended sanity check.
 5. Only greenhouse-gas emissions and energy are covered: no water, land use,
-   abiotic resource depletion or other LCA categories yet.
+   abiotic resource depletion or other LCA categories yet. EcoLogits provides
+   some of these, so they are a natural next step.
 6. Training and the amortisation of training emissions are not included.
 7. A session started in a subdirectory of a project is included by backfill
    in the parent project. Hooks attribute it to the directory Claude Code was

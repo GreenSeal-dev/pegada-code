@@ -31,6 +31,8 @@ def _scale(iv: Interval, base: str):
 def interval(iv: Interval, base: str, suffix: str = "", mid: bool = True) -> str:
     """``interval(Interval(1200, 2400, 4800), "Wh")`` → ``1.20–4.80 kWh (mid 2.40)``."""
     factor, unit = _scale(iv, base)
+    if iv.low == iv.high:  # a point value (e.g. every input was a point value)
+        return f"{sig(iv.mid / factor)} {unit}{suffix}"
     s = f"{sig(iv.low / factor)}–{sig(iv.high / factor)} {unit}{suffix}"
     if mid:
         s += f" (mid {sig(iv.mid / factor)})"

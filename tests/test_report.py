@@ -24,8 +24,8 @@ class ReportTest(TempEnvTestCase):
             ingest.backfill(DEMO_ROOT, ClaudeCodeParser(FIXTURES))
         self.contents = Ledger(self.ledger_file).read()
 
-    def report(self, contents=None):
-        est = Estimator(load_coefficients(), load_parameters())
+    def report(self, contents=None, coefficients=None):
+        est = Estimator(load_coefficients(coefficients), load_parameters())
         return build_report(contents or self.contents, est, project=DEMO_ROOT)
 
     def test_unlogged_usage_is_separate(self):
@@ -50,18 +50,36 @@ class ReportTest(TempEnvTestCase):
         self.assertEqual(rep["by_model"]["mystery-model-1"]["family"], "unknown")
         self.assertTrue(any("mystery-model-1" in w for w in rep["warnings"]))
 
-    def test_markdown_shows_intervals_and_banner(self):
+    def placeholder_file(self):
+        path = os.path.join(self.tmp, "placeholder.json")
+        with open(path, "w") as fh:
+            json.dump({"coefficients_version": "p", "families": [],
+                       "fallback": {"id": "f", "e_prefill": 1, "e_cache": 1, "e_decode": 1, "status": "PLACEHOLDER"}}, fh)
+        return path
+
+    def test_markdown_shows_intervals(self):
         md = render_markdown(self.report())
-        self.assertIn("Placeholder coefficients", md)
+        self.assertNotIn("Placeholder coefficients", md)
         self.assertIn("–", md)
         self.assertIn("Unlogged usage", md)
         self.assertIn("Cache read", md)
+        self.assertIn("Per-response overhead", md)
+        self.assertIn("PUE: 1.36", md)  # point value shown without a range
+
+    def test_placeholder_banner(self):
+        md = render_markdown(self.report(coefficients=self.placeholder_file()))
+        self.assertIn("Placeholder coefficients", md)
 
     def test_badge(self):
         md = badge(self.report())
         self.assertTrue(md.startswith("[![AI coding CO2e: "))
         self.assertIn("https://img.shields.io/badge/AI%20coding%20CO2e-", md)
-        self.assertIn("placeholder", md)
+        self.assertNotIn("placeholder", md)
+        self.assertIn("placeholder", badge(self.report(coefficients=self.placeholder_file())))
+
+    def test_approximation_warning(self):
+        rep = self.report()
+        self.assertTrue(any("claude-opus-5-5 → claude-opus-5-5" in w for w in rep["warnings"]))
 
     def test_empty_report(self):
         from pegada.ledger import LedgerContents

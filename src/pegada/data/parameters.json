@@ -1,25 +1,25 @@
 {
-  "schema_version": 1,
-  "description": "Infrastructure parameters applied on top of the per-token IT energy. Each is a {low, mid, high} triple. Override any of them in the project config (.claude/pegada.config.json) with a number or a triple. See METHODOLOGY.md.",
+  "schema_version": 2,
+  "description": "Infrastructure parameters applied on top of the per-token IT energy. Each is a {low, mid, high} triple (equal values = a point value). Override any of them in the project config (.claude/pegada.config.json) with a number or a triple. See METHODOLOGY.md §4.3.",
   "pue": {
-    "low": 1.1, "mid": 1.2, "high": 1.56,
+    "low": 1.36, "mid": 1.36, "high": 1.36,
     "unit": "dimensionless",
     "status": "DEFAULT",
-    "source": "low ≈ Google fleet-wide trailing PUE (~1.10, 2023 environmental report); high = Uptime Institute Global Data Center Survey 2024 industry average (1.56); mid = hyperscale-typical value (AWS reported ~1.15 for 2023).",
-    "notes": "The serving provider and data centre are not disclosed; the range spans hyperscale to industry-average facilities."
+    "source": "Uptime Institute Global Data Center Survey 2026, capacity-weighted average annual PUE (1.36; Uptime Intelligence, 'The growing PUE advantage of larger data centers', 6 Aug 2026). The per-facility average is 1.52.",
+    "notes": "Consequential framing: running on an efficient hyperscale facility displaces other load onto the average facility, so the capacity-weighted industry average is used instead of the provider's own PUE (EcoLogits uses 1.09–1.14 for Anthropic). Point value by design."
   },
   "grid_intensity": {
-    "low": 50, "mid": 370, "high": 700,
+    "low": 50, "mid": 384.4, "high": 700,
     "unit": "gCO2e/kWh (location-based)",
     "status": "DEFAULT",
-    "source": "mid ≈ US grid average (EIA 2023: 0.81 lb CO2/kWh ≈ 367 g); low = low-carbon grids (hydro/nuclear-heavy regions); high = coal-heavy grids. Location-based, not market-based (renewable energy certificates are not accounted for).",
-    "notes": "The serving region is unknown (transcripts report inference_geo = not_available). Set this to your best knowledge of the serving region."
+    "source": "mid = EcoLogits 0.11.1 electricity mix for the USA (0.3844 kgCO2e/kWh). low/high: indicative spread between low-carbon (hydro/nuclear-heavy) and coal-heavy grids, not taken from a dataset.",
+    "notes": "The serving region is unknown (transcripts report inference_geo = not_available). Location-based: renewable energy certificates and PPAs are not credited."
   },
   "embodied": {
-    "low": 10, "mid": 40, "high": 150,
+    "low": 9.565, "mid": 29.64, "high": 97.24,
     "unit": "gCO2e per kWh of IT energy",
-    "status": "PLACEHOLDER",
-    "source": "PLACEHOLDER: embodied emissions of an 8-GPU inference server (order of 3–10 tCO2e) amortised over its lifetime IT energy (4 years at ~6 kW and ~60% utilisation ≈ 125 MWh). Not measured, not for citation.",
-    "notes": "Amortised per kWh of IT energy (i.e. before PUE). Facility/building embodied emissions are not included."
+    "status": "DERIVED",
+    "source": "Envelope of the per-family factors derived from EcoLogits 0.11.1 (H100 GPU and server manufacturing GWP, 3-year lifetime, time-allocated). calibration/derive_coefficients.py.",
+    "notes": "Model families carry their own embodied factor; this value applies only to a family without one. Setting 'embodied' in the project config overrides every family."
   }
 }
