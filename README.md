@@ -138,7 +138,7 @@ If you use pegada-code in research, please cite it (see [CITATION.cff](CITATION.
   author  = {Cruz, Luís},
   title   = {pegada-code: energy and carbon footprint estimates for AI coding agents},
   year    = {2026},
-  version = {0.2.1},
+  version = {0.2.2},
   url     = {https://github.com/GreenSeal-dev/pegada-code},
   license = {Apache-2.0}
 }
